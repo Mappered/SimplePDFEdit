@@ -82,11 +82,24 @@ jobs:
       - name: Verify the toolchain
         shell: pwsh
         run: |
-          $electron = (& ./runtime/electron.exe --version) -join ''
-          if (-not $electron) { throw 'electron.exe did not report a version' }
+          # electron.exe is a GUI-subsystem binary: on a runner without a console it
+          # prints nothing for --version, so check the runtime's own files instead.
+          $exe = 'runtime/electron.exe'
+          if (-not (Test-Path $exe)) { throw "$exe is missing" }
+          $sizeMb = [math]::Round((Get-Item $exe).Length / 1MB, 1)
+          if ($sizeMb -lt 50) { throw "$exe looks truncated ($sizeMb MB)" }
+          foreach ($file in 'runtime/version', 'runtime/resources.pak', 'runtime/icudtl.dat', 'runtime/snapshot_blob.bin') {
+            if (-not (Test-Path $file)) { throw "$file is missing from the runtime" }
+          }
+          $runtimeVersion = (Get-Content 'runtime/version' -Raw).Trim()
+          if ($runtimeVersion -ne $env:ELECTRON_VERSION) {
+            Write-Host "::warning::runtime reports $runtimeVersion but $env:ELECTRON_VERSION was requested"
+          }
+          Write-Host "electron runtime $runtimeVersion, $sizeMb MB"
+
           $qpdf = (& ./tools/qpdf/qpdf.exe --version | Select-Object -First 1) -join ''
           if (-not $qpdf) { throw 'qpdf.exe did not report a version' }
-          Write-Host "bundling $electron and $qpdf"
+          Write-Host "qpdf: $qpdf"
 
       - name: Build the single executable
         shell: pwsh
