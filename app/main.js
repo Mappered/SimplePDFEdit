@@ -26,8 +26,12 @@ function createWindow() {
   const win = new BrowserWindow({
     width: 1440, height: 920, minWidth: 1100, minHeight: 700,
     icon: path.join(__dirname, 'icon.ico'),
+    // The app brings its own toolbar: no File/Edit/View bar, but the default menu is
+    // still there for its accelerators (Alt shows it for anyone who wants it).
+    autoHideMenuBar: true,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: false }
   })
+  win.setMenuBarVisibility(false)
   win.webContents.setWindowOpenHandler(({ url }) => { shell.openExternal(url); return { action: 'deny' } })
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'))
   const cli = cliPdfArg()
