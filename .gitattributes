@@ -1,0 +1,7 @@
+# Keep binary assets byte-exact: line-ending conversion would break the xref offsets
+# inside test fixtures and the icon files.
+*.pdf  -text
+*.png  -text
+*.ico  -text
+*.exe  -text
+*.dll  -text

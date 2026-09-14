@@ -1,0 +1,14 @@
+{
+  "version": "1.0.0.0",
+  "configurations": [
+    {
+      "name": "Run PDF Stream Editor",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "${workspaceFolder}/runtime/electron.exe",
+      "args": ["${workspaceFolder}/app"],
+      "cwd": "${workspaceFolder}",
+      "outputCapture": "std"
+    }
+  ]
+}

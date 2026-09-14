@@ -1,0 +1,5 @@
+{
+  "name": "pdf-stream-editor-tests",
+  "private": true,
+  "main": "run.js"
+}

@@ -1,0 +1,121 @@
+name: Build Windows exe
+
+# Builds the single-file executable (dist\PDFStreamEditor.exe).
+#
+# The vendored pieces the desktop build needs are not in git (runtime\electron.exe is
+# 235 MB, over GitHub's file limit), so the workflow fetches them first: the Electron
+# runtime from the electron/electron releases and qpdf from the qpdf/qpdf releases.
+# Override the versions from the Actions tab when a new one is needed.
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'tools/launcher/**'
+      - 'build.ps1'
+      - 'make-icon.ps1'
+      - '.github/workflows/build-exe.yml'
+  workflow_dispatch:
+    inputs:
+      electron_version:
+        description: Electron version to bundle
+        required: true
+        default: '44.3.0'
+      qpdf_version:
+        description: qpdf version to bundle
+        required: true
+        default: '12.4.1'
+
+env:
+  ELECTRON_VERSION: ${{ github.event.inputs.electron_version || '44.3.0' }}
+  QPDF_VERSION: ${{ github.event.inputs.qpdf_version || '12.4.1' }}
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch the Electron runtime
+        shell: pwsh
+        run: |
+          $ProgressPreference = 'SilentlyContinue'
+          $v = $env:ELECTRON_VERSION
+          $url = "https://github.com/electron/electron/releases/download/v$v/electron-v$v-win32-x64.zip"
+          Write-Host "downloading $url"
+          Invoke-WebRequest -Uri $url -OutFile electron.zip
+          Expand-Archive -LiteralPath electron.zip -DestinationPath runtime -Force
+          Remove-Item electron.zip
+
+      - name: Fetch qpdf
+        shell: pwsh
+        run: |
+          $ProgressPreference = 'SilentlyContinue'
+          $v = $env:QPDF_VERSION
+          $asset = "qpdf-$v-msvc64.zip"
+          $url = "https://github.com/qpdf/qpdf/releases/download/v$v/$asset"
+          try {
+            Invoke-WebRequest -Uri $url -OutFile qpdf.zip
+          } catch {
+            # Asset names have changed between releases - ask the API what this one has.
+            Write-Host "  $asset not found, looking up the release assets"
+            $asset = gh release view "v$v" --repo qpdf/qpdf --json assets --jq '.assets[].name' |
+              Where-Object { $_ -like '*msvc64.zip' } | Select-Object -First 1
+            if (-not $asset) { throw "no msvc64 zip published for qpdf v$v" }
+            $url = "https://github.com/qpdf/qpdf/releases/download/v$v/$asset"
+            Write-Host "downloading $url"
+            Invoke-WebRequest -Uri $url -OutFile qpdf.zip
+          }
+          Expand-Archive -LiteralPath qpdf.zip -DestinationPath qpdf-tmp -Force
+          Remove-Item qpdf.zip
+
+          # The archive keeps qpdf.exe and its DLLs together, sometimes under bin\.
+          $exe = Get-ChildItem qpdf-tmp -Recurse -Filter qpdf.exe | Select-Object -First 1
+          if (-not $exe) { throw 'qpdf.exe not found in the archive' }
+          New-Item -ItemType Directory -Force -Path tools/qpdf | Out-Null
+          Copy-Item -Path (Join-Path $exe.Directory.FullName '*') -Destination tools/qpdf -Recurse -Force
+          Remove-Item qpdf-tmp -Recurse -Force
+
+      - name: Verify the toolchain
+        shell: pwsh
+        run: |
+          $electron = (& ./runtime/electron.exe --version) -join ''
+          if (-not $electron) { throw 'electron.exe did not report a version' }
+          $qpdf = (& ./tools/qpdf/qpdf.exe --version | Select-Object -First 1) -join ''
+          if (-not $qpdf) { throw 'qpdf.exe did not report a version' }
+          Write-Host "bundling $electron and $qpdf"
+
+      - name: Build the single executable
+        shell: pwsh
+        run: ./build.ps1
+
+      - name: Upload the executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: PDFStreamEditor-exe
+          path: dist/PDFStreamEditor.exe
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    # Pushing a v* tag publishes the exe as a release asset.
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: PDFStreamEditor-exe
+
+      - name: Attach the executable to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --title "$tag" --generate-notes
+          gh release upload "$tag" PDFStreamEditor.exe --clobber

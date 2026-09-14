@@ -1,0 +1,7 @@
+<!doctype html><html><head><meta charset="utf-8"><title>PDF Stream Editor</title><link rel="stylesheet" href="./style.css"></head>
+<body>
+<header class="toolbar"><button id="openBtn">Open PDF</button><button id="saveBtn" disabled>Save modified as…</button><button id="resetBtn" disabled>Reset</button><span id="status">Open a PDF.</span></header>
+<main class="panes"><section><h2>Original</h2><div id="original" class="pdf-scroll"></div></section><section><h2>Modified <span id="editCount">0 edits</span></h2><div id="modified" class="pdf-scroll empty">Modified preview appears here.</div></section></main>
+<footer class="bottombar"><label>Zoom <input id="zoom" type="range" min="0.6" max="2.4" step="0.05" value="1.25"></label><span id="pageInfo">No document</span></footer>
+<dialog id="editDialog"><form method="dialog"><p id="editPrompt"></p><input id="replacement" autocomplete="off"><menu><button value="cancel">Cancel</button><button value="ok">Apply stream edit</button></menu></form></dialog>
+<script type="module" src="./app.js"></script></body></html>
